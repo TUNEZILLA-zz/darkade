@@ -794,6 +794,9 @@ function drawGrid() {
 
 function drawPlayer() {
   const angle = Math.atan2(pointer.y - player.y, pointer.x - player.x);
+  const healthRatio = clamp(player.health / player.maxHealth, 0, 1);
+  const fillColor = healthRatio < 0.3 ? "#ff5a1f" : healthRatio < 0.55 ? "#ffd166" : "#ffffff";
+  const pulse = healthRatio < 0.3 ? 0.5 + Math.sin(performance.now() * 0.018) * 0.35 : 0;
   ctx.save();
   ctx.translate(player.x, player.y);
   ctx.rotate(angle);
@@ -809,12 +812,43 @@ function drawPlayer() {
     ctx.fill();
   });
 
+  function traceShip() {
+    ctx.moveTo(28, 0);
+    ctx.lineTo(-18, -17);
+    ctx.lineTo(-10, 0);
+    ctx.lineTo(-18, 17);
+    ctx.closePath();
+  }
+
+  if (pulse > 0) {
+    withGlow("#ff5a1f", 30, () => {
+      ctx.beginPath();
+      traceShip();
+      ctx.strokeStyle = colorAlpha("#ff5a1f", 0.4 + pulse * 0.35);
+      ctx.lineWidth = 10 + pulse * 6;
+      ctx.stroke();
+    });
+  }
+
   ctx.beginPath();
-  ctx.moveTo(28, 0);
-  ctx.lineTo(-18, -17);
-  ctx.lineTo(-10, 0);
-  ctx.lineTo(-18, 17);
-  ctx.closePath();
+  traceShip();
+  withGlow("#2c3640", 10, () => {
+    ctx.fillStyle = "rgba(15, 20, 26, 0.96)";
+    ctx.fill();
+  });
+
+  ctx.save();
+  ctx.beginPath();
+  traceShip();
+  ctx.clip();
+  withGlow(fillColor, healthRatio < 0.3 ? 24 : 16, () => {
+    ctx.fillStyle = colorAlpha(fillColor, healthRatio < 0.3 ? 0.82 : 0.94);
+    ctx.fillRect(-22, 17 - 34 * healthRatio, 56, 34 * healthRatio);
+  });
+  ctx.restore();
+
+  ctx.beginPath();
+  traceShip();
   withGlow(neonColors.player, 22, () => {
     ctx.strokeStyle = colorAlpha(neonColors.player, 0.42);
     ctx.lineWidth = 8;
@@ -823,17 +857,22 @@ function drawPlayer() {
   ctx.strokeStyle = neonColors.player;
   ctx.lineWidth = 2.5;
   withGlow(neonColors.player, 10, () => ctx.stroke());
-  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-  ctx.fill();
-  ctx.restore();
 
-  withGlow(player.health > 35 ? neonColors.heal : neonColors.stalker, 12, () => {
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(player.x - 23, player.y + 26, 46, 6);
-    ctx.fillStyle = player.health > 35 ? neonColors.heal : neonColors.stalker;
-    ctx.fillRect(player.x - 23, player.y + 26, 46 * (player.health / player.maxHealth), 6);
+  withGlow("#ffffff", 8, () => {
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.88)";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(28, 0);
+    ctx.lineTo(-10, 0);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(21, -3);
+    ctx.lineTo(28, 0);
+    ctx.lineTo(21, 3);
+    ctx.stroke();
   });
+
+  ctx.restore();
 }
 
 function drawPowerup(powerup) {
