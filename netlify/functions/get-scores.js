@@ -8,7 +8,7 @@ const headers = {
 function getSupabaseConfig() {
   return {
     url: process.env.SUPABASE_URL,
-    key: process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_KEY
+    key: process.env.SUPABASE_SERVICE_ROLE_KEY
   };
 }
 
@@ -29,7 +29,7 @@ async function fetchTopScores() {
   );
 
   if (!response.ok) {
-    throw new Error(`Supabase getScores failed: ${response.status}`);
+    throw new Error(`Supabase get-scores failed: ${response.status}`);
   }
 
   return response.json();

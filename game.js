@@ -23,8 +23,8 @@ const moveKnob = movePad.querySelector("span");
 const firePad = document.getElementById("firePad");
 
 const leaderboardKey = "murderlandLeaderboard";
-const getScoresUrl = "/.netlify/functions/getScores";
-const submitScoreUrl = "/.netlify/functions/submitScore";
+const getScoresUrl = "/.netlify/functions/get-scores";
+const submitScoreUrl = "/.netlify/functions/submit-score";
 const world = { width: 960, height: 640 };
 const keys = new Set();
 const pointer = { x: world.width / 2, y: world.height / 2, active: false };
@@ -119,6 +119,10 @@ function getLeaderboardHighScore() {
   return leaderboard.length ? leaderboard[0].score : 0;
 }
 
+function isAcceptedScore(value) {
+  return Number.isFinite(value) && value >= 0 && value <= 9999999;
+}
+
 function saveLeaderboard() {
   try {
     localStorage.setItem(leaderboardKey, JSON.stringify(leaderboard));
@@ -158,7 +162,18 @@ async function fetchGlobalLeaderboard() {
 }
 
 async function submitScore(entry) {
-  saveLocalLeaderboardScore(entry);
+  const run = {
+    name: cleanPlayerName(entry.name),
+    score: Math.floor(Number(entry.score)),
+    wave: Math.max(1, Math.floor(Number(entry.wave) || 1))
+  };
+
+  if (!isAcceptedScore(run.score)) {
+    await fetchGlobalLeaderboard();
+    return;
+  }
+
+  saveLocalLeaderboardScore(run);
 
   try {
     const response = await fetch(submitScoreUrl, {
@@ -167,7 +182,7 @@ async function submitScore(entry) {
         "Content-Type": "application/json",
         Accept: "application/json"
       },
-      body: JSON.stringify(entry)
+      body: JSON.stringify(run)
     });
     if (!response.ok) throw new Error("Score submission failed");
     const data = await response.json();
