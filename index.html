@@ -16,6 +16,11 @@
 </head>
 <body>
   <main class="game-shell">
+    <div class="top-strip">
+      <div class="brand-mark" aria-label="Darkade">DARKADE</div>
+      <button id="pauseBtn" class="pause-button" type="button" disabled>Pause</button>
+    </div>
+
     <header class="hud" aria-label="Game status">
       <div>
         <span class="label">Score</span>
@@ -43,6 +48,7 @@
       <canvas id="gameCanvas" width="960" height="640" aria-label="Murderland Arcade game area"></canvas>
 
       <div id="startScreen" class="overlay">
+        <div class="start-brand">DARKADE</div>
         <h1>Murderland Arcade</h1>
         <p>Redline the cabinet. Clear waves, crush bosses, and keep moving.</p>
         <label class="name-entry" for="playerName">
@@ -64,6 +70,11 @@
           <div id="gameOverLeaderboardList" class="leaderboard-list"></div>
         </section>
         <button id="restartBtn" type="button">Restart</button>
+      </div>
+
+      <div id="pauseScreen" class="overlay pause-overlay hidden">
+        <h2>Paused</h2>
+        <button id="resumeBtn" type="button">Resume</button>
       </div>
 
       <div class="touch-controls" aria-hidden="true">
