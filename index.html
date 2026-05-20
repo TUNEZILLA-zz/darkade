@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Murderland Arcade</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="hud" aria-label="Game status">
+      <div>
+        <span class="label">Score</span>
+        <strong id="score">0</strong>
+      </div>
+      <div>
+        <span class="label">Wave</span>
+        <strong id="wave">1</strong>
+      </div>
+      <div>
+        <span class="label">Health</span>
+        <strong id="health">100</strong>
+      </div>
+      <div>
+        <span class="label">Power</span>
+        <strong id="power">Ready</strong>
+      </div>
+      <div>
+        <span class="label">High</span>
+        <strong id="highScore">0</strong>
+      </div>
+    </header>
+
+    <section class="arena-wrap">
+      <canvas id="gameCanvas" width="960" height="640" aria-label="Murderland Arcade game area"></canvas>
+
+      <div id="startScreen" class="overlay">
+        <h1>Murderland Arcade</h1>
+        <p>Redline the cabinet. Clear waves, crush bosses, and keep moving.</p>
+        <button id="startBtn" type="button">Start Run</button>
+      </div>
+
+      <div id="gameOverScreen" class="overlay hidden">
+        <h2>Run Over</h2>
+        <p id="finalScore">Score: 0</p>
+        <button id="restartBtn" type="button">Restart</button>
+      </div>
+
+      <div class="touch-controls" aria-hidden="true">
+        <div id="movePad" class="touch-pad">
+          <span></span>
+        </div>
+        <button id="firePad" class="fire-pad" type="button">Fire</button>
+      </div>
+    </section>
+
+    <footer class="controls">
+      <span>Move: WASD or arrows</span>
+      <span>Aim: mouse or touch</span>
+      <span>Fire: click, space, or Fire button</span>
+    </footer>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
