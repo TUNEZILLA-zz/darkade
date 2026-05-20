@@ -23,6 +23,8 @@ const moveKnob = movePad.querySelector("span");
 const firePad = document.getElementById("firePad");
 
 const leaderboardKey = "murderlandLeaderboard";
+const getScoresUrl = "/.netlify/functions/getScores";
+const submitScoreUrl = "/.netlify/functions/submitScore";
 const world = { width: 960, height: 640 };
 const keys = new Set();
 const pointer = { x: world.width / 2, y: world.height / 2, active: false };
@@ -61,6 +63,7 @@ let shakeDuration = 0;
 let currentPlayerName = "PLAYER";
 let leaderboard = readLeaderboard();
 let highScore = getLeaderboardHighScore();
+let leaderboardMode = "local";
 let audioContext = null;
 let muted = false;
 let audioUnlocked = false;
@@ -93,7 +96,12 @@ function normalizeLeaderboard(scores) {
 }
 
 function cleanPlayerName(name) {
-  const cleaned = String(name || "").trim().toUpperCase().replace(/\s+/g, " ").slice(0, 12);
+  const cleaned = String(name || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 _-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 12);
   return cleaned || "PLAYER";
 }
 
@@ -119,14 +127,56 @@ function saveLeaderboard() {
   }
 }
 
-function saveLeaderboardScore() {
+function saveLocalLeaderboardScore(entry) {
   leaderboard = normalizeLeaderboard([
     ...leaderboard,
-    { name: currentPlayerName, score, wave }
+    entry
   ]);
   highScore = getLeaderboardHighScore();
   saveLeaderboard();
   renderLeaderboards();
+}
+
+function setLeaderboard(scores, mode) {
+  leaderboard = normalizeLeaderboard(scores);
+  leaderboardMode = mode;
+  highScore = getLeaderboardHighScore();
+  renderLeaderboards();
+}
+
+async function fetchGlobalLeaderboard() {
+  try {
+    const response = await fetch(getScoresUrl, { headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error("Leaderboard request failed");
+    const data = await response.json();
+    if (!Array.isArray(data.scores)) throw new Error("Leaderboard response was invalid");
+    setLeaderboard(data.scores, "online");
+  } catch {
+    leaderboardMode = "local";
+    renderLeaderboards();
+  }
+}
+
+async function submitScore(entry) {
+  saveLocalLeaderboardScore(entry);
+
+  try {
+    const response = await fetch(submitScoreUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify(entry)
+    });
+    if (!response.ok) throw new Error("Score submission failed");
+    const data = await response.json();
+    if (!Array.isArray(data.scores)) throw new Error("Submit response was invalid");
+    setLeaderboard(data.scores, "online");
+  } catch {
+    leaderboardMode = "local";
+    renderLeaderboards();
+  }
 }
 
 function renderLeaderboards() {
@@ -283,7 +333,7 @@ function endGame() {
   resetControls();
   pauseBtn.disabled = true;
   pauseBtn.textContent = "Pause";
-  saveLeaderboardScore();
+  submitScore({ name: currentPlayerName, score, wave });
   playSound("gameover");
   finalScoreEl.textContent = `${currentPlayerName} | Score: ${score} | Wave: ${wave} | High: ${highScore}`;
   gameOverScreen.classList.remove("hidden");
@@ -1103,5 +1153,6 @@ playerNameInput.addEventListener("blur", () => {
 resizeCanvas();
 resetGame();
 renderLeaderboards();
+fetchGlobalLeaderboard();
 draw();
 requestAnimationFrame(loop);
