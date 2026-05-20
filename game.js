@@ -11,10 +11,15 @@ const gameOverScreen = document.getElementById("gameOverScreen");
 const finalScoreEl = document.getElementById("finalScore");
 const startBtn = document.getElementById("startBtn");
 const restartBtn = document.getElementById("restartBtn");
+const playerNameInput = document.getElementById("playerName");
+const leaderboardListEl = document.getElementById("leaderboardList");
+const gameOverLeaderboardListEl = document.getElementById("gameOverLeaderboardList");
+const muteBtn = document.getElementById("muteBtn");
 const movePad = document.getElementById("movePad");
 const moveKnob = movePad.querySelector("span");
 const firePad = document.getElementById("firePad");
 
+const leaderboardKey = "murderlandLeaderboard";
 const world = { width: 960, height: 640 };
 const keys = new Set();
 const pointer = { x: world.width / 2, y: world.height / 2, active: false };
@@ -38,13 +43,174 @@ let flashTimer = 0;
 let shakeTimer = 0;
 let shakePower = 0;
 let shakeDuration = 0;
-let highScore = readHighScore();
+let currentPlayerName = "PLAYER";
+let leaderboard = readLeaderboard();
+let highScore = getLeaderboardHighScore();
+let audioContext = null;
+let muted = false;
+let audioUnlocked = false;
 
-function readHighScore() {
+// Leaderboard storage keeps the top 10 named runs and migrates the old single high score.
+function readLeaderboard() {
+  let scores = [];
   try {
-    return Number(localStorage.getItem("murderlandHighScore") || 0);
+    scores = JSON.parse(localStorage.getItem(leaderboardKey) || "[]");
+    if (!Array.isArray(scores)) scores = [];
+    const legacyHighScore = Number(localStorage.getItem("murderlandHighScore") || 0);
+    if (legacyHighScore > 0 && scores.length === 0) {
+      scores.push({ name: "PLAYER", score: legacyHighScore, wave: 1 });
+    }
   } catch {
-    return 0;
+    scores = [];
+  }
+  return normalizeLeaderboard(scores);
+}
+
+function normalizeLeaderboard(scores) {
+  return scores
+    .map(entry => ({
+      name: cleanPlayerName(entry.name),
+      score: Math.max(0, Number(entry.score) || 0),
+      wave: Math.max(1, Number(entry.wave) || 1)
+    }))
+    .sort((a, b) => b.score - a.score || b.wave - a.wave)
+    .slice(0, 10);
+}
+
+function cleanPlayerName(name) {
+  const cleaned = String(name || "").trim().toUpperCase().replace(/\s+/g, " ").slice(0, 12);
+  return cleaned || "PLAYER";
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  }[char]));
+}
+
+function getLeaderboardHighScore() {
+  return leaderboard.length ? leaderboard[0].score : 0;
+}
+
+function saveLeaderboard() {
+  try {
+    localStorage.setItem(leaderboardKey, JSON.stringify(leaderboard));
+  } catch {
+    // Private or restricted browsing can disable storage; gameplay should continue.
+  }
+}
+
+function saveLeaderboardScore() {
+  leaderboard = normalizeLeaderboard([
+    ...leaderboard,
+    { name: currentPlayerName, score, wave }
+  ]);
+  highScore = getLeaderboardHighScore();
+  saveLeaderboard();
+  renderLeaderboards();
+}
+
+function renderLeaderboards() {
+  const rows = leaderboard.length
+    ? leaderboard.map((entry, index) => `
+      <div class="leaderboard-row">
+        <span>#${index + 1}</span>
+        <span>${escapeHtml(entry.name)}</span>
+        <span>${entry.score}</span>
+        <span>W${entry.wave}</span>
+      </div>
+    `).join("")
+    : `<p class="leaderboard-empty">No scores yet</p>`;
+  const html = `
+    <div class="leaderboard-row leaderboard-head">
+      <span>Rank</span>
+      <span>Name</span>
+      <span>Score</span>
+      <span>Wave</span>
+    </div>
+    ${rows}
+  `;
+
+  leaderboardListEl.innerHTML = html;
+  gameOverLeaderboardListEl.innerHTML = html;
+  highScoreEl.textContent = highScore;
+}
+
+// Web Audio sound effects are generated locally and unlocked by the first user gesture.
+function unlockAudio() {
+  if (audioUnlocked) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  audioContext = audioContext || new AudioCtor();
+  if (audioContext.state === "suspended") audioContext.resume();
+  audioUnlocked = true;
+}
+
+function setMuted(nextMuted) {
+  muted = nextMuted;
+  muteBtn.textContent = muted ? "Sound Off" : "Sound On";
+  muteBtn.setAttribute("aria-pressed", String(muted));
+}
+
+function playTone(frequency, duration, type = "square", volume = 0.08, glideTo = frequency) {
+  if (muted || !audioContext) return;
+  const now = audioContext.currentTime;
+  const oscillator = audioContext.createOscillator();
+  const gain = audioContext.createGain();
+
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, glideTo), now + duration);
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  oscillator.connect(gain);
+  gain.connect(audioContext.destination);
+  oscillator.start(now);
+  oscillator.stop(now + duration);
+}
+
+function playNoise(duration, volume = 0.08) {
+  if (muted || !audioContext) return;
+  const now = audioContext.currentTime;
+  const buffer = audioContext.createBuffer(1, audioContext.sampleRate * duration, audioContext.sampleRate);
+  const data = buffer.getChannelData(0);
+  const source = audioContext.createBufferSource();
+  const gain = audioContext.createGain();
+
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+  }
+  source.buffer = buffer;
+  gain.gain.setValueAtTime(volume, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+  source.connect(gain);
+  gain.connect(audioContext.destination);
+  source.start(now);
+}
+
+function playSound(name) {
+  if (muted || !audioContext) return;
+  if (name === "shoot") playTone(420, 0.06, "square", 0.045, 190);
+  if (name === "hit") playTone(130, 0.07, "sawtooth", 0.05, 70);
+  if (name === "damage") {
+    playNoise(0.18, 0.11);
+    playTone(90, 0.16, "sawtooth", 0.06, 45);
+  }
+  if (name === "powerup") {
+    playTone(520, 0.08, "triangle", 0.06, 880);
+    window.setTimeout(() => playTone(760, 0.08, "triangle", 0.045, 1040), 70);
+  }
+  if (name === "wave") {
+    playTone(330, 0.1, "triangle", 0.055, 520);
+    window.setTimeout(() => playTone(660, 0.12, "triangle", 0.05, 990), 90);
+  }
+  if (name === "gameover") {
+    playTone(190, 0.18, "sawtooth", 0.075, 120);
+    window.setTimeout(() => playTone(110, 0.28, "sawtooth", 0.07, 55), 150);
   }
 }
 
@@ -83,6 +249,9 @@ function startWave() {
 }
 
 function startGame() {
+  unlockAudio();
+  currentPlayerName = cleanPlayerName(playerNameInput.value);
+  playerNameInput.value = currentPlayerName === "PLAYER" ? "" : currentPlayerName;
   resetGame();
   gameState = "playing";
   startScreen.classList.add("hidden");
@@ -91,28 +260,18 @@ function startGame() {
 
 function endGame() {
   gameState = "gameover";
-  saveHighScore();
-  finalScoreEl.textContent = `Score: ${score} | High: ${highScore}`;
+  saveLeaderboardScore();
+  playSound("gameover");
+  finalScoreEl.textContent = `${currentPlayerName} | Score: ${score} | Wave: ${wave} | High: ${highScore}`;
   gameOverScreen.classList.remove("hidden");
 }
 
 function updateHud() {
-  saveHighScore();
   scoreEl.textContent = score;
   waveEl.textContent = wave;
   healthEl.textContent = Math.max(0, Math.ceil(player.health));
   powerEl.textContent = activePower ? `${activePower} ${Math.ceil(powerTimer)}s` : "Ready";
   highScoreEl.textContent = Math.max(highScore, score);
-}
-
-function saveHighScore() {
-  if (score <= highScore) return;
-  highScore = score;
-  try {
-    localStorage.setItem("murderlandHighScore", String(highScore));
-  } catch {
-    // Private or restricted browsing can disable storage; gameplay should continue.
-  }
 }
 
 function addShake(power, duration) {
@@ -214,6 +373,7 @@ function shoot() {
     });
   }
   addShake(activePower === "Blaster" ? 4 : 2.5, 0.07);
+  playSound("shoot");
 }
 
 function spawnBurst(x, y, color, amount) {
@@ -305,6 +465,7 @@ function update(dt) {
   if (enemiesToSpawn === 0 && enemies.length === 0) {
     wave++;
     score += 120 + wave * 15;
+    playSound("wave");
     startWave();
   }
 
@@ -356,6 +517,7 @@ function update(dt) {
       bullet.life = 0;
       enemy.health -= bullet.damage;
       enemy.hitTimer = 0.08;
+      playSound("hit");
       spawnBurst(bullet.x, bullet.y, "#f4c95d", 5);
       if (enemy.health <= 0) {
         score += enemy.score;
@@ -372,6 +534,7 @@ function update(dt) {
     player.invuln = 0.75;
     flashTimer = 0.18;
     addShake(enemy.boss ? 18 : 11, 0.28);
+    playSound("damage");
     spawnBurst(player.x, player.y, "#ffffff", 16);
     if (player.health <= 0) {
       player.health = 0;
@@ -386,6 +549,7 @@ function update(dt) {
       applyPowerup(powerup.type);
       powerup.collected = true;
       score += 40;
+      playSound("powerup");
       spawnBurst(powerup.x, powerup.y, "#31c7b7", 20);
     }
   }
@@ -568,6 +732,11 @@ function setPointerFromEvent(event) {
 
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("keydown", event => {
+  unlockAudio();
+  if (event.target === playerNameInput) {
+    if (event.code === "Enter") startGame();
+    return;
+  }
   keys.add(event.code);
   if (event.code === "Space") event.preventDefault();
   if ((gameState === "start" || gameState === "gameover") && event.code === "Enter") startGame();
@@ -576,6 +745,7 @@ window.addEventListener("keyup", event => keys.delete(event.code));
 
 canvas.addEventListener("pointermove", setPointerFromEvent);
 canvas.addEventListener("pointerdown", event => {
+  unlockAudio();
   pointer.active = true;
   setPointerFromEvent(event);
   canvas.setPointerCapture(event.pointerId);
@@ -605,6 +775,7 @@ function updateMovePad(touch) {
 }
 
 movePad.addEventListener("touchstart", event => {
+  unlockAudio();
   const touch = event.changedTouches[0];
   touchMove.id = touch.identifier;
   updateMovePad(touch);
@@ -629,6 +800,7 @@ movePad.addEventListener("touchend", event => {
 }, { passive: false });
 
 firePad.addEventListener("pointerdown", event => {
+  unlockAudio();
   pointer.active = true;
   firePad.setPointerCapture(event.pointerId);
 });
@@ -642,8 +814,17 @@ firePad.addEventListener("pointercancel", () => {
 
 startBtn.addEventListener("click", startGame);
 restartBtn.addEventListener("click", startGame);
+muteBtn.addEventListener("click", () => {
+  unlockAudio();
+  setMuted(!muted);
+});
+playerNameInput.addEventListener("blur", () => {
+  const cleanName = cleanPlayerName(playerNameInput.value);
+  playerNameInput.value = cleanName === "PLAYER" ? "" : cleanName;
+});
 
 resizeCanvas();
 resetGame();
+renderLeaderboards();
 draw();
 requestAnimationFrame(loop);

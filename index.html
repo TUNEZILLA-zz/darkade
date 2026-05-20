@@ -3,7 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Murderland Arcade</title>
+  <title>Darkade / Murderland Arcade</title>
+  <meta name="description" content="Play Murderland Arcade, a fast static browser game from Darkade with waves, bosses, powerups, and high-score runs.">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="Darkade / Murderland Arcade">
+  <meta property="og:description" content="Clear waves, crush bosses, and chase high scores in this fast static browser arcade game.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Darkade / Murderland Arcade">
+  <meta name="twitter:description" content="A fast static browser arcade game with waves, bosses, powerups, and high-score runs.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -37,12 +45,24 @@
       <div id="startScreen" class="overlay">
         <h1>Murderland Arcade</h1>
         <p>Redline the cabinet. Clear waves, crush bosses, and keep moving.</p>
+        <label class="name-entry" for="playerName">
+          <span>Player Name</span>
+          <input id="playerName" name="playerName" type="text" maxlength="12" autocomplete="off" placeholder="PLAYER">
+        </label>
+        <section class="leaderboard" aria-label="Leaderboard">
+          <h2>Leaderboard</h2>
+          <div id="leaderboardList" class="leaderboard-list"></div>
+        </section>
         <button id="startBtn" type="button">Start Run</button>
       </div>
 
       <div id="gameOverScreen" class="overlay hidden">
         <h2>Run Over</h2>
         <p id="finalScore">Score: 0</p>
+        <section class="leaderboard" aria-label="Leaderboard">
+          <h2>Leaderboard</h2>
+          <div id="gameOverLeaderboardList" class="leaderboard-list"></div>
+        </section>
         <button id="restartBtn" type="button">Restart</button>
       </div>
 
@@ -58,6 +78,7 @@
       <span>Move: WASD or arrows</span>
       <span>Aim: mouse or touch</span>
       <span>Fire: click, space, or Fire button</span>
+      <button id="muteBtn" class="mute-button" type="button" aria-pressed="false">Sound On</button>
     </footer>
   </main>
 
