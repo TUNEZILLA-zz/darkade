@@ -21,9 +21,9 @@ This project is ready for Netlify as a static site:
 Set these Netlify environment variables:
 
 - `SUPABASE_URL` - Your Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key, stored only in Netlify
+- `SUPABASE_ANON_KEY` - Your Supabase anon public API key
 
-Do not put the Supabase service role key in frontend code.
+Do not use the Supabase service role key in frontend code or Netlify Function code for this public leaderboard. Access is controlled by the RLS policies below.
 
 ## Supabase
 
@@ -35,11 +35,30 @@ create table public.scores (
   name text not null,
   score integer not null,
   wave integer not null,
-  created_at timestamptz not null default now()
+  created_at timestamp with time zone not null default now()
 );
 
 create index scores_leaderboard_idx
   on public.scores (score desc, wave desc, created_at asc);
+
+alter table public.scores enable row level security;
+
+create policy "scores_select_public"
+  on public.scores
+  for select
+  to anon, authenticated
+  using (true);
+
+create policy "scores_insert_public"
+  on public.scores
+  for insert
+  to anon, authenticated
+  with check (
+    length(name) between 1 and 12
+    and name ~ '^[A-Z0-9 _-]+$'
+    and score between 0 and 9999999
+    and wave >= 1
+  );
 ```
 
 The Netlify Functions sanitize player names before insert:
@@ -50,6 +69,8 @@ The Netlify Functions sanitize player names before insert:
 - scores below `0` or above `9999999` are rejected by the submit endpoint
 
 The browser keeps the localStorage leaderboard as an offline fallback. On game over it saves locally first, then submits to `/.netlify/functions/submit-score` when the API is available. The start and game over leaderboard views read the global top 10 from `/.netlify/functions/get-scores`.
+
+If different devices show different scores, check the browser console for fallback messages and verify the deployed Netlify site has the required environment variables. The functions use the anon key server-side; the RLS policies above permit public reads and constrained public inserts for the `scores` table.
 
 ## Files
 

@@ -151,11 +151,12 @@ function setLeaderboard(scores, mode) {
 async function fetchGlobalLeaderboard() {
   try {
     const response = await fetch(getScoresUrl, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error("Leaderboard request failed");
+    if (!response.ok) throw new Error(`Leaderboard request failed: ${response.status}`);
     const data = await response.json();
     if (!Array.isArray(data.scores)) throw new Error("Leaderboard response was invalid");
     setLeaderboard(data.scores, "online");
-  } catch {
+  } catch (error) {
+    console.warn("Using local leaderboard fallback:", error.message);
     leaderboardMode = "local";
     renderLeaderboards();
   }
@@ -184,11 +185,12 @@ async function submitScore(entry) {
       },
       body: JSON.stringify(run)
     });
-    if (!response.ok) throw new Error("Score submission failed");
+    if (!response.ok) throw new Error(`Score submission failed: ${response.status}`);
     const data = await response.json();
     if (!Array.isArray(data.scores)) throw new Error("Submit response was invalid");
     setLeaderboard(data.scores, "online");
-  } catch {
+  } catch (error) {
+    console.warn("Score saved locally; online submit failed:", error.message);
     leaderboardMode = "local";
     renderLeaderboards();
   }
