@@ -70,7 +70,7 @@ The Netlify Functions sanitize player names before insert:
 
 The browser keeps the localStorage leaderboard as an offline fallback. On game over it saves locally first, then submits to `/.netlify/functions/submit-score` when the API is available. The start and game over leaderboard views read the global top 10 from `/.netlify/functions/get-scores`.
 
-If different devices show different scores, check the browser console for fallback messages and verify the deployed Netlify site has the required environment variables. The functions use the anon key server-side; the RLS policies above permit public reads and constrained public inserts for the `scores` table.
+When Supabase is connected, the UI title says `GLOBAL LEADERBOARD`. If the API or database fails, it says `LOCAL FALLBACK` and logs the actual error in the browser console. If different devices show different scores, check the browser console for fallback messages and verify the deployed Netlify site has `SUPABASE_URL` and `SUPABASE_ANON_KEY` set. The functions use the anon key server-side; the RLS policies above permit public reads and constrained public inserts for the `scores` table.
 
 ## Files
 

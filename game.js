@@ -15,6 +15,7 @@ const pauseBtn = document.getElementById("pauseBtn");
 const pauseScreen = document.getElementById("pauseScreen");
 const resumeBtn = document.getElementById("resumeBtn");
 const playerNameInput = document.getElementById("playerName");
+const leaderboardTitleEls = document.querySelectorAll(".leaderboard h2");
 const leaderboardListEl = document.getElementById("leaderboardList");
 const gameOverLeaderboardListEl = document.getElementById("gameOverLeaderboardList");
 const muteBtn = document.getElementById("muteBtn");
@@ -148,15 +149,32 @@ function setLeaderboard(scores, mode) {
   renderLeaderboards();
 }
 
+async function readApiResponse(response, fallbackMessage) {
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // Non-JSON errors still need a useful message for debugging deploy config.
+  }
+
+  if (!response.ok) {
+    throw new Error(data?.error || `${fallbackMessage}: ${response.status}`);
+  }
+
+  if (!Array.isArray(data?.scores)) {
+    throw new Error(`${fallbackMessage}: response did not include scores`);
+  }
+
+  return data;
+}
+
 async function fetchGlobalLeaderboard() {
   try {
     const response = await fetch(getScoresUrl, { headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`Leaderboard request failed: ${response.status}`);
-    const data = await response.json();
-    if (!Array.isArray(data.scores)) throw new Error("Leaderboard response was invalid");
+    const data = await readApiResponse(response, "Leaderboard request failed");
     setLeaderboard(data.scores, "online");
   } catch (error) {
-    console.warn("Using local leaderboard fallback:", error.message);
+    console.error("Using local leaderboard fallback:", error);
     leaderboardMode = "local";
     renderLeaderboards();
   }
@@ -185,12 +203,10 @@ async function submitScore(entry) {
       },
       body: JSON.stringify(run)
     });
-    if (!response.ok) throw new Error(`Score submission failed: ${response.status}`);
-    const data = await response.json();
-    if (!Array.isArray(data.scores)) throw new Error("Submit response was invalid");
+    const data = await readApiResponse(response, "Score submission failed");
     setLeaderboard(data.scores, "online");
   } catch (error) {
-    console.warn("Score saved locally; online submit failed:", error.message);
+    console.error("Score saved locally; online submit failed:", error);
     leaderboardMode = "local";
     renderLeaderboards();
   }
@@ -219,6 +235,9 @@ function renderLeaderboards() {
 
   leaderboardListEl.innerHTML = html;
   gameOverLeaderboardListEl.innerHTML = html;
+  leaderboardTitleEls.forEach(title => {
+    title.textContent = leaderboardMode === "online" ? "GLOBAL LEADERBOARD" : "LOCAL FALLBACK";
+  });
   highScoreEl.textContent = highScore;
 }
 

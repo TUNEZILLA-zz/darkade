@@ -6,6 +6,14 @@ const headers = {
 };
 
 function getSupabaseConfig() {
+  const missing = [];
+  if (!process.env.SUPABASE_URL) missing.push("SUPABASE_URL");
+  if (!process.env.SUPABASE_ANON_KEY) missing.push("SUPABASE_ANON_KEY");
+
+  if (missing.length) {
+    throw new Error(`Missing Netlify environment variable(s): ${missing.join(", ")}`);
+  }
+
   return {
     url: process.env.SUPABASE_URL,
     key: process.env.SUPABASE_ANON_KEY
@@ -42,9 +50,6 @@ function normalizeRun(body) {
 
 async function supabaseRequest(path, options = {}) {
   const { url, key } = getSupabaseConfig();
-  if (!url || !key) {
-    throw new Error("Missing Supabase environment variables");
-  }
 
   const response = await fetch(`${url}/rest/v1/${path}`, {
     ...options,
@@ -56,7 +61,8 @@ async function supabaseRequest(path, options = {}) {
   });
 
   if (!response.ok) {
-    throw new Error(`Supabase request failed: ${response.status}`);
+    const details = await response.text();
+    throw new Error(`Supabase request failed: ${response.status} ${details}`);
   }
 
   return response;
