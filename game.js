@@ -44,10 +44,12 @@ const neonColors = {
 
 let player;
 let bullets;
+let bossBullets;
 let enemies;
 let particles;
 let powerups;
 let gridRipples;
+let bossTelegraphs;
 let score;
 let wave;
 let gameState = "start";
@@ -326,10 +328,12 @@ function resetGame() {
     invuln: 0
   };
   bullets = [];
+  bossBullets = [];
   enemies = [];
   particles = [];
   powerups = [];
   gridRipples = [];
+  bossTelegraphs = [];
   score = 0;
   wave = 1;
   shotTimer = 0;
@@ -424,6 +428,10 @@ function distance(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+function angleTo(a, b) {
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
 function rand(min, max) {
   return Math.random() * (max - min) + min;
 }
@@ -481,7 +489,9 @@ function spawnBoss() {
     angle: Math.PI / 2,
     phase: 0,
     hitTimer: 0,
-    boss: true
+    boss: true,
+    attackTimer: 1.15,
+    minionTimer: 5.5
   });
 }
 
@@ -522,6 +532,124 @@ function spawnBurst(x, y, color, amount) {
       color,
       size: rand(2, 4.5)
     });
+  }
+}
+
+function spawnBossBullet(x, y, angle, speed, options = {}) {
+  bossBullets.push({
+    x,
+    y,
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    r: options.r || 7,
+    damage: options.damage || 10,
+    life: options.life || 4.2,
+    color: options.color || "#ff4fd8",
+    trail: options.trail || 34
+  });
+}
+
+function bossHealthRatio(boss) {
+  return clamp(boss.health / boss.maxHealth, 0, 1);
+}
+
+function bossPhase(boss) {
+  const ratio = bossHealthRatio(boss);
+  if (ratio > 0.7) return 1;
+  if (ratio > 0.4) return 2;
+  return 3;
+}
+
+function scheduleBossTelegraph(boss, type, delay) {
+  const angle = angleTo(boss, player);
+  bossTelegraphs.push({
+    boss,
+    type,
+    x: boss.x,
+    y: boss.y,
+    angle,
+    timer: delay,
+    maxTimer: delay
+  });
+}
+
+function fireBossPattern(boss, type, angle = angleTo(boss, player)) {
+  if (type === "aimed") {
+    spawnBossBullet(boss.x, boss.y, angle, 255 + wave * 4, {
+      damage: 10,
+      color: "#ff4fd8"
+    });
+  } else if (type === "spread") {
+    for (const offset of [-0.32, 0, 0.32]) {
+      spawnBossBullet(boss.x, boss.y, angle + offset, 235 + wave * 3, {
+        damage: 10,
+        color: "#ff9f1c"
+      });
+    }
+  } else if (type === "ring") {
+    const count = 14 + Math.min(8, Math.floor(wave / 5) * 2);
+    const spin = boss.phase * 0.8;
+    for (let i = 0; i < count; i++) {
+      spawnBossBullet(boss.x, boss.y, spin + (Math.PI * 2 * i) / count, 190 + wave * 2, {
+        r: 6,
+        damage: 9,
+        color: neonColors.boss,
+        trail: 24
+      });
+    }
+    addShake(8, 0.18);
+    addGridRipple(boss.x, boss.y, 1.1);
+  }
+}
+
+function spawnBossMinion(boss) {
+  const angle = rand(0, Math.PI * 2);
+  const type = Math.random() < 0.55 ? "slicer" : "stalker";
+  const spec = type === "slicer"
+    ? { r: 12, speed: 145 + wave * 5, health: 1, score: 25, color: "#ff6b00" }
+    : { r: 15, speed: 98 + wave * 5, health: 2, score: 30, color: "#ff1d25" };
+
+  enemies.push({
+    x: clamp(boss.x + Math.cos(angle) * 72, 40, world.width - 40),
+    y: clamp(boss.y + Math.sin(angle) * 72, 50, world.height - 50),
+    r: spec.r,
+    speed: spec.speed,
+    health: spec.health,
+    maxHealth: spec.health,
+    score: spec.score,
+    color: spec.color,
+    type,
+    angle: rand(0, Math.PI * 2),
+    phase: rand(0, Math.PI * 2),
+    hitTimer: 0,
+    boss: false
+  });
+}
+
+function updateBossAttacks(boss, dt) {
+  const phase = bossPhase(boss);
+  boss.attackTimer -= dt;
+
+  if (boss.attackTimer <= 0) {
+    if (phase === 1) {
+      fireBossPattern(boss, "aimed");
+      boss.attackTimer = Math.max(0.95, 1.38 - wave * 0.035);
+    } else if (phase === 2) {
+      scheduleBossTelegraph(boss, "spread", 0.42);
+      boss.attackTimer = Math.max(1.08, 1.55 - wave * 0.03);
+    } else {
+      const useRing = Math.random() < 0.42;
+      scheduleBossTelegraph(boss, useRing ? "ring" : "spread", useRing ? 0.72 : 0.38);
+      boss.attackTimer = useRing ? 2.35 : 1.18;
+    }
+  }
+
+  if (phase === 3) {
+    boss.minionTimer -= dt;
+    if (boss.minionTimer <= 0) {
+      spawnBossMinion(boss);
+      boss.minionTimer = 4.8;
+    }
   }
 }
 
@@ -619,6 +747,13 @@ function update(dt) {
   }
   bullets = bullets.filter(b => b.life > 0 && b.x > -40 && b.x < world.width + 40 && b.y > -40 && b.y < world.height + 40);
 
+  for (const bullet of bossBullets) {
+    bullet.x += bullet.vx * dt;
+    bullet.y += bullet.vy * dt;
+    bullet.life -= dt;
+  }
+  bossBullets = bossBullets.filter(b => b.life > 0 && b.x > -60 && b.x < world.width + 60 && b.y > -60 && b.y < world.height + 60);
+
   for (const enemy of enemies) {
     const dx = player.x - enemy.x;
     const dy = player.y - enemy.y;
@@ -640,19 +775,33 @@ function update(dt) {
       enemy.x += clamp(targetX - enemy.x, -enemy.speed, enemy.speed) * slow * dt;
       enemy.y += clamp(targetY - enemy.y, -enemy.speed, enemy.speed) * slow * dt;
     } else if (enemy.type === "boss") {
-      enemy.x += Math.sin(enemy.phase * 1.6) * enemy.speed * 0.55 * dt;
-      enemy.y += ty * enemy.speed * 0.72 * slow * dt;
+      const phaseSpeed = bossPhase(enemy) === 1 ? 1 : bossPhase(enemy) === 2 ? 1.28 : 1.42;
+      enemy.x += Math.sin(enemy.phase * 1.6) * enemy.speed * 0.55 * phaseSpeed * dt;
+      enemy.y += ty * enemy.speed * 0.72 * slow * phaseSpeed * dt;
       if (enemy.y > 122) {
         enemy.y = 122 + Math.sin(enemy.phase * 1.8) * 18;
-        enemy.x += tx * enemy.speed * 0.52 * slow * dt;
+        enemy.x += tx * enemy.speed * 0.52 * slow * phaseSpeed * dt;
       }
       enemy.x = clamp(enemy.x, enemy.r + 24, world.width - enemy.r - 24);
+      updateBossAttacks(enemy, dt);
     } else {
       enemy.x += tx * enemy.speed * slow * dt;
       enemy.y += ty * enemy.speed * slow * dt;
     }
     enemy.hitTimer = Math.max(0, enemy.hitTimer - dt);
   }
+
+  for (const telegraph of bossTelegraphs) {
+    telegraph.timer -= dt;
+    telegraph.x = telegraph.boss.x;
+    telegraph.y = telegraph.boss.y;
+    if (telegraph.type !== "ring") telegraph.angle = angleTo(telegraph.boss, player);
+    if (telegraph.timer <= 0 && telegraph.boss.health > 0) {
+      fireBossPattern(telegraph.boss, telegraph.type, telegraph.angle);
+      telegraph.done = true;
+    }
+  }
+  bossTelegraphs = bossTelegraphs.filter(t => !t.done && t.timer > 0 && t.boss.health > 0);
 
   for (const bullet of bullets) {
     for (const enemy of enemies) {
@@ -672,6 +821,26 @@ function update(dt) {
     }
   }
   enemies = enemies.filter(e => e.health > 0);
+  if (!enemies.some(enemy => enemy.boss)) bossTelegraphs = [];
+
+  for (const bullet of bossBullets) {
+    if (player.invuln > 0 || bullet.hit || distance(player, bullet) > player.r + bullet.r) continue;
+    bullet.hit = true;
+    player.health -= bullet.damage;
+    player.invuln = 0.65;
+    flashTimer = 0.16;
+    addShake(9, 0.2);
+    playSound("damage");
+    addGridRipple(player.x, player.y, 0.7);
+    spawnBurst(player.x, player.y, bullet.color, 12);
+    if (player.health <= 0) {
+      player.health = 0;
+      endGame();
+      break;
+    }
+  }
+  bossBullets = bossBullets.filter(b => !b.hit);
+  if (gameState !== "playing") return;
 
   for (const enemy of enemies) {
     if (player.invuln > 0 || distance(player, enemy) > player.r + enemy.r) continue;
@@ -967,6 +1136,63 @@ function drawBullet(bullet) {
   ctx.fill();
 }
 
+function drawBossBullet(bullet) {
+  const speed = Math.hypot(bullet.vx, bullet.vy) || 1;
+  const nx = bullet.vx / speed;
+  const ny = bullet.vy / speed;
+  const trail = bullet.trail || 30;
+  const gradient = ctx.createLinearGradient(bullet.x - nx * trail, bullet.y - ny * trail, bullet.x, bullet.y);
+  gradient.addColorStop(0, colorAlpha(bullet.color, 0));
+  gradient.addColorStop(1, colorAlpha(bullet.color, 0.8));
+
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = 3.5;
+  withGlow(bullet.color, 14, () => {
+    ctx.beginPath();
+    ctx.moveTo(bullet.x - nx * trail, bullet.y - ny * trail);
+    ctx.lineTo(bullet.x, bullet.y);
+    ctx.stroke();
+  });
+
+  withGlow(bullet.color, 18, () => {
+    ctx.fillStyle = colorAlpha(bullet.color, 0.72);
+    ctx.beginPath();
+    ctx.arc(bullet.x, bullet.y, bullet.r + 4, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(bullet.x, bullet.y, Math.max(2.5, bullet.r * 0.45), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawBossTelegraph(telegraph) {
+  const progress = 1 - telegraph.timer / telegraph.maxTimer;
+  const alpha = 0.18 + progress * 0.62;
+  const pulse = 1 + Math.sin(performance.now() * 0.025) * 0.08;
+  const color = telegraph.type === "ring" ? neonColors.boss : "#ff9f1c";
+
+  withGlow(color, 18, () => {
+    ctx.strokeStyle = colorAlpha(color, alpha);
+    ctx.lineWidth = telegraph.type === "ring" ? 4 : 3;
+    ctx.beginPath();
+    if (telegraph.type === "ring") {
+      ctx.arc(telegraph.x, telegraph.y, (72 + progress * 58) * pulse, 0, Math.PI * 2);
+      ctx.moveTo(telegraph.x - 16, telegraph.y);
+      ctx.lineTo(telegraph.x + 16, telegraph.y);
+      ctx.moveTo(telegraph.x, telegraph.y - 16);
+      ctx.lineTo(telegraph.x, telegraph.y + 16);
+    } else {
+      for (const offset of telegraph.type === "spread" ? [-0.32, 0, 0.32] : [0]) {
+        const angle = telegraph.angle + offset;
+        ctx.moveTo(telegraph.x, telegraph.y);
+        ctx.lineTo(telegraph.x + Math.cos(angle) * 820, telegraph.y + Math.sin(angle) * 820);
+      }
+    }
+    ctx.stroke();
+  });
+}
+
 function traceEnemyShape(enemy) {
   const r = enemy.r;
   if (enemy.type === "slicer") {
@@ -1058,12 +1284,20 @@ function draw() {
 
   drawGrid();
 
+  for (const telegraph of bossTelegraphs) {
+    drawBossTelegraph(telegraph);
+  }
+
   for (const powerup of powerups) {
     drawPowerup(powerup);
   }
 
   for (const bullet of bullets) {
     drawBullet(bullet);
+  }
+
+  for (const bullet of bossBullets) {
+    drawBossBullet(bullet);
   }
 
   for (const enemy of enemies) {
